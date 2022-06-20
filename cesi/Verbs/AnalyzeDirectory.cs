@@ -3,6 +3,9 @@ using System.CommandLine.Invocation;
 using System.Diagnostics;
 using System.Text.Json;
 using cesi.Analyzers;
+using cesi.DTOs;
+using CouchDB.Driver;
+using CouchDB.Driver.Exceptions;
 using Microsoft.Extensions.Logging;
 using Wabbajack.Common;
 using Wabbajack.FileExtractor;
@@ -17,65 +20,80 @@ public class AnalyzeDirectory : IVerb
     private readonly ILogger<AnalyzeDirectory> _logger;
     private readonly FileExtractor _extractor;
     private readonly IEnumerable<IAnalyzer> _analyzers;
+    private readonly CouchClient _client;
 
-    public AnalyzeDirectory(ILogger<AnalyzeDirectory> logger, IEnumerable<IAnalyzer> analyzers)
+    public AnalyzeDirectory(ILogger<AnalyzeDirectory> logger, IEnumerable<IAnalyzer> analyzers, CouchClient client)
     {
         _logger = logger;
         _analyzers = analyzers;
+        _client = client;
     }
     public Command MakeCommand()
     {
         var command = new Command("analyze-directory");
         command.Add(new Option<AbsolutePath>(new[] {"-i", "-input"}, "Input Archive"));
-        command.Add(new Option<AbsolutePath>(new[] {"-o", "-output"}, "Output folder"));
         command.Description = "Extracts the contents of an archive into a folder";
         command.Handler = CommandHandler.Create(Run);
         return command;
     }
     
-    private async Task<int> Run(AbsolutePath input, AbsolutePath output, CancellationToken token)
+    private async Task<int> Run(AbsolutePath input, CancellationToken token)
     {
-        if (!output.DirectoryExists())
-            output.CreateDirectory();
+
+        var db = _client.GetDatabase<DTOs.Analyzed>("cesi");
 
         var opts = new JsonSerializerOptions()
         {
             WriteIndented = true
         };
 
-        foreach (var file in input.EnumerateFiles().Where(f => f.Extension != Ext.Meta).Take(100))
+        foreach (var file in input.EnumerateFiles().Where(f => f.Extension != Ext.Meta))
         {
             //_logger.LogInformation("Analyzing {file}", file.RelativeTo(input));
             _logger.LogInformation("Analyzing {Name}", file.FileName);
-            await AnalyzeFile(output, token, file, opts);
+            await AnalyzeFile(db, token, file, opts);
         }
 
         return 0;
     }
 
-    private async Task AnalyzeFile(AbsolutePath output, CancellationToken token, AbsolutePath file,
+    private async Task AnalyzeFile(ICouchDatabase<Analyzed> db, CancellationToken token, AbsolutePath file,
         JsonSerializerOptions opts)
     {
+        _logger.LogInformation("Analyzing {File}", file.FileName);
         var initialHash = await file.Hash();
-        var outPath = SplitPath(initialHash).RelativeTo(output.Combine("analysis")).WithExtension(Ext.Json);
-        outPath.Parent.CreateDirectory();
 
-        await using var os = outPath.Open(FileMode.Create, FileAccess.Write, FileShare.None);
-        await using var utf8Writer = new Utf8JsonWriter(os, new JsonWriterOptions() {Indented = true});
+        var ms = new MemoryStream();
+        await using var utf8Writer = new Utf8JsonWriter(ms, new JsonWriterOptions() {Indented = true});
         utf8Writer.WriteStartObject();
         utf8Writer.WriteString("xxHash64", initialHash.ToCompatibleHex());
+        utf8Writer.WriteString("Id", initialHash.ToCompatibleHex());
         foreach (var analyzer in _analyzers)
         {
-            _logger.LogInformation("- Start: {Name}", analyzer.Name);
-            var stopwatch = Stopwatch.StartNew();
-            await analyzer.Analyze(utf8Writer, opts, file, async path =>
+            try
             {
-                await AnalyzeFile(output, token, path, opts);
-            }, token);
-            _logger.LogInformation("- End: {Elapsed}ms {Name}", stopwatch.ElapsedMilliseconds, analyzer.Name);
+                await analyzer.Analyze(utf8Writer, opts, file,
+                    async path => { await AnalyzeFile(db, token, path, opts); }, token);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "While running Analyzer {Name}", analyzer.Name);
+            }
         }
 
         utf8Writer.WriteEndObject();
+        await utf8Writer.FlushAsync(token);
+
+        ms.Position = 0;
+        try
+        {
+            var doc = await JsonSerializer.DeserializeAsync<Analyzed>(ms, cancellationToken: token)!;
+            await db.AddOrUpdateAsync(doc, false, token);
+        }
+        catch (CouchConflictException ex)
+        {
+            
+        }
     }
 
     private RelativePath SplitPath(Hash initialHash)

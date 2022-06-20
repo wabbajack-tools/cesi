@@ -2,6 +2,8 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cesi", "cesi\cesi.csproj", "{02CC08F0-F89D-4EF1-B799-23B79F7677C5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cesi.DTOs", "cesi.DTOs\cesi.DTOs.csproj", "{CDEDE745-31CA-43D5-8FE5-797865DF8BC9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -12,5 +14,9 @@ Global
 		{02CC08F0-F89D-4EF1-B799-23B79F7677C5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{02CC08F0-F89D-4EF1-B799-23B79F7677C5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{02CC08F0-F89D-4EF1-B799-23B79F7677C5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CDEDE745-31CA-43D5-8FE5-797865DF8BC9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CDEDE745-31CA-43D5-8FE5-797865DF8BC9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CDEDE745-31CA-43D5-8FE5-797865DF8BC9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CDEDE745-31CA-43D5-8FE5-797865DF8BC9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

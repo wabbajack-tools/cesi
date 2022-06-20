@@ -41,7 +41,7 @@ public class Archive : IAnalyzer
         foreach (var file in tempPath.Path.EnumerateFiles())
         {
             var hash = await file.Hash();
-            writer.WriteString(file.RelativeTo(tempPath.Path).ToString(), hash.ToHex());
+            writer.WriteString(file.RelativeTo(tempPath.Path).ToString(), hash.ToCompatibleHex());
             await analyzeSubFile(file);
         }
         writer.WriteEndObject();
